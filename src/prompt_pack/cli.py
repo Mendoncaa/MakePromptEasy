@@ -1,0 +1,131 @@
+"""CLI entry point for prompt-pack."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
+from prompt_pack.config import MAX_FILE_SIZE_BYTES
+from prompt_pack.formatter import _estimate_tokens, build_markdown
+from prompt_pack.scanner import scan_directory
+
+app = typer.Typer(
+    name="prompt-pack",
+    help="Pack a directory of code into a single Markdown prompt file.",
+    add_completion=False,
+)
+
+console = Console()
+err_console = Console(stderr=True)
+
+
+@app.command()
+def main(
+    path: Annotated[
+        Path,
+        typer.Argument(
+            help="Directory to pack.",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            readable=True,
+            resolve_path=True,
+        ),
+    ],
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output file path. Defaults to 'prompt_output.md'.",
+            writable=True,
+            resolve_path=True,
+        ),
+    ] = None,
+    no_clipboard: Annotated[
+        bool,
+        typer.Option("--no-clipboard", help="Skip copying to clipboard."),
+    ] = False,
+    max_size: Annotated[
+        int,
+        typer.Option(
+            "--max-size",
+            help="Maximum file size to include, in KB.",
+            min=1,
+        ),
+    ] = MAX_FILE_SIZE_BYTES // 1024,
+) -> None:
+    """Pack *PATH* into a single Markdown file and copy it to the clipboard."""
+    max_size_bytes = max_size * 1024
+
+    # ── Scan ─────────────────────────────────────────────────────────────────
+    with console.status("[bold cyan]Scanning files…", spinner="dots"):
+        try:
+            files = list(scan_directory(path, max_size_bytes=max_size_bytes))
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            err_console.print(f"[bold red]Error:[/] {exc}")
+            raise typer.Exit(code=1) from exc
+
+    if not files:
+        err_console.print(
+            Panel(
+                "[yellow]No files found.[/] Check the path or ignore rules.",
+                title="prompt-pack",
+                border_style="yellow",
+            )
+        )
+        raise typer.Exit(code=0)
+
+    # ── Build Markdown ────────────────────────────────────────────────────────
+    with console.status("[bold cyan]Building Markdown…", spinner="dots"):
+        markdown = build_markdown(files, root=path)
+
+    # ── Write file ────────────────────────────────────────────────────────────
+    out_path = output or (Path.cwd() / "prompt_output.md")
+    try:
+        out_path.write_text(markdown, encoding="utf-8")
+    except OSError as exc:
+        err_console.print(f"[bold red]Error writing file:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    # ── Clipboard ─────────────────────────────────────────────────────────────
+    clipboard_ok = False
+    if not no_clipboard:
+        try:
+            import pyperclip  # noqa: PLC0415
+
+            pyperclip.copy(markdown)
+            clipboard_ok = True
+        except Exception:  # noqa: BLE001
+            pass  # Clipboard failure is non-fatal
+
+    # ── Summary panel ─────────────────────────────────────────────────────────
+    total_lines = markdown.count("\n")
+    tokens = _estimate_tokens(markdown)
+    clipboard_status = (
+        "[green]✓ copied to clipboard[/]"
+        if clipboard_ok
+        else "[dim]clipboard unavailable[/]"
+    )
+
+    summary = Text.assemble(
+        ("Files packed: ", "bold"), (f"{len(files)}\n", "cyan"),
+        ("Lines: ", "bold"), (f"{total_lines:,}\n", "cyan"),
+        ("~Tokens: ", "bold"), (f"{tokens:,}\n", "cyan"),
+        ("Output: ", "bold"), (f"{out_path}\n", "cyan"),
+        ("Clipboard: ", "bold"),
+    )
+    summary.append_text(Text.from_markup(clipboard_status))
+
+    console.print(
+        Panel(summary, title="[bold green]prompt-pack[/] done ✓", border_style="green")
+    )
+
+
+if __name__ == "__main__":
+    app()
