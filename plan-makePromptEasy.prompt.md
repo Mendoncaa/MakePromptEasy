@@ -52,34 +52,34 @@ MakePromptEasy/
 
 | Etapa | Descrição | Status |
 |---|---|---|
-| **0.1** | Criar estrutura de pastas + `pyproject.toml` + `.gitignore` + `plan.md` inicial | [ ] |
-| **0.2** | `git init` + `gh repo create Mendoncaa/MakePromptEasy --public` + push inicial | [ ] |
-| **0.3** | `pip install -e ".[dev]"` e validar que `prompt-pack --help` responde | [ ] |
+| **0.1** | Criar estrutura de pastas + `pyproject.toml` + `.gitignore` + `plan.md` inicial | [x] |
+| **0.2** | `git init` + `gh repo create Mendoncaa/MakePromptEasy --public` + push inicial | [x] |
+| **0.3** | `pip install -e ".[dev]"` e validar que `prompt-pack --help` responde | [x] |
 
 ### Phase 1 — Core Engine *(etapas sequenciais, dependem de 0.3)*
 
 | Etapa | Descrição | Status |
 |---|---|---|
-| **1.1** | `config.py` — `DEFAULT_IGNORE_DIRS`, `DEFAULT_IGNORE_EXTENSIONS`, `MAX_FILE_SIZE_BYTES` (500KB) | [ ] |
-| **1.2** | `filters.py` — `should_ignore(path: Path, config) -> bool` com lógica por extensão, nome de pasta e tamanho | [ ] |
-| **1.3** | `scanner.py` — `scan_directory(root: Path, config) -> Generator[Path, None, None]` — travessia recursiva lazy | [ ] |
-| **1.4** | `formatter.py` — `build_markdown(files, root: Path) -> str` — cabeçalho com meta, blocos ``` por ficheiro, rodapé com contagem | [ ] |
+| **1.1** | `config.py` — `DEFAULT_IGNORE_DIRS`, `DEFAULT_IGNORE_EXTENSIONS`, `MAX_FILE_SIZE_BYTES` (500KB) | [x] |
+| **1.2** | `filters.py` — `should_ignore(path: Path, config) -> bool` com lógica por extensão, nome de pasta e tamanho | [x] |
+| **1.3** | `scanner.py` — `scan_directory(root: Path, config) -> Generator[Path, None, None]` — travessia recursiva lazy | [x] |
+| **1.4** | `formatter.py` — `build_markdown(files, root: Path) -> str` — cabeçalho com meta, blocos ``` por ficheiro, rodapé com contagem | [x] |
 
 ### Phase 2 — CLI Layer *(depende de 1.4)*
 
 | Etapa | Descrição | Status |
 |---|---|---|
-| **2.1** | `cli.py` — `prompt-pack <path> [--output FILE] [--no-clipboard] [--max-size KB]` com typer | [ ] |
-| **2.2** | Escrever `.md` em disco + `pyperclip.copy()` + painel `rich` com sumário (N ficheiros, N linhas, ~N tokens estimados) | [ ] |
+| **2.1** | `cli.py` — `prompt-pack <path> [--output FILE] [--no-clipboard] [--max-size KB]` com typer | [x] |
+| **2.2** | Escrever `.md` em disco + `pyperclip.copy()` + painel `rich` com sumário (N ficheiros, N linhas, ~N tokens estimados) | [x] |
 
 ### Phase 3 — Tests *(paralelas entre si, dependem de 2.2)*
 
 | Etapa | Descrição | Status |
 |---|---|---|
-| **3.1** | `test_filters.py` — testa cada regra de filtro individualmente com fixtures | [ ] |
-| **3.2** | `test_scanner.py` — cria árvore de ficheiros em `tmp_path`, valida generator | [ ] |
-| **3.3** | `test_formatter.py` — valida estrutura Markdown gerada (blocos, cabeçalhos) | [ ] |
-| **3.4** | Teste de integração end-to-end via `typer.testing.CliRunner` | [ ] |
+| **3.1** | `test_filters.py` — testa cada regra de filtro individualmente com fixtures | [x] |
+| **3.2** | `test_scanner.py` — cria árvore de ficheiros em `tmp_path`, valida generator | [x] |
+| **3.3** | `test_formatter.py` — valida estrutura Markdown gerada (blocos, cabeçalhos) | [x] |
+| **3.4** | Teste de integração end-to-end via `typer.testing.CliRunner` | [x] |
 
 ### Phase 4 — Polish *(depende de 3.4 passar a 100%)*
 
