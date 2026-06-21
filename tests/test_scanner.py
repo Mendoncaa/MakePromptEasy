@@ -111,3 +111,95 @@ class TestScanDirectory:
         results = {p.name for p in scan_directory(root)}
         assert "accessible.py" in results
         assert "secret.py" not in results
+
+
+class TestScanDirectoryExtensions:
+    def _make_mixed_tree(self, tmp_path: Path) -> Path:
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "main.py").write_text("x=1\n", encoding="utf-8")
+        (root / "index.ts").write_text("const x=1;\n", encoding="utf-8")
+        (root / "style.css").write_text("body{}\n", encoding="utf-8")
+        sub = root / "src"
+        sub.mkdir()
+        (sub / "utils.py").write_text("pass\n", encoding="utf-8")
+        (sub / "app.go").write_text("package main\n", encoding="utf-8")
+        return root
+
+    def test_include_single_extension(self, tmp_path):
+        root = self._make_mixed_tree(tmp_path)
+        results = {p.name for p in scan_directory(root, include_extensions={".py"})}
+        assert results == {"main.py", "utils.py"}
+
+    def test_include_multiple_extensions(self, tmp_path):
+        root = self._make_mixed_tree(tmp_path)
+        results = {
+            p.name for p in scan_directory(root, include_extensions={".py", ".ts"})
+        }
+        assert results == {"main.py", "index.ts", "utils.py"}
+
+    def test_include_extensions_respects_size_limit(self, tmp_path):
+        root = tmp_path / "proj"
+        root.mkdir()
+        small = root / "small.py"
+        small.write_bytes(b"x" * 100)
+        large = root / "large.py"
+        large.write_bytes(b"y" * (200 * 1024))
+        results = {
+            p.name
+            for p in scan_directory(
+                root, max_size_bytes=1024, include_extensions={".py"}
+            )
+        }
+        assert "small.py" in results
+        assert "large.py" not in results
+
+    def test_include_extensions_respects_promptpackignore(self, tmp_path):
+        from prompt_pack.ignorefilter import IGNORE_FILE_NAME
+
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / IGNORE_FILE_NAME).write_text("secrets.py\n", encoding="utf-8")
+        (root / "main.py").write_text("x=1\n", encoding="utf-8")
+        (root / "secrets.py").write_text("key='abc'\n", encoding="utf-8")
+        results = {p.name for p in scan_directory(root, include_extensions={".py"})}
+        assert "main.py" in results
+        assert "secrets.py" not in results
+
+    def test_include_extensions_still_prunes_ignored_dirs(self, tmp_tree):
+        """node_modules must be pruned even in include_extensions mode."""
+        results = {
+            p.name
+            for p in scan_directory(tmp_tree, include_extensions={".js"})
+        }
+        # lib.js is inside node_modules — must be excluded
+        assert "lib.js" not in results
+
+    def test_none_extensions_returns_all_valid(self, tmp_tree):
+        """Passing include_extensions=None is equivalent to default behaviour."""
+        default_results = set(scan_directory(tmp_tree))
+        explicit_none_results = set(scan_directory(tmp_tree, include_extensions=None))
+        assert default_results == explicit_none_results
+
+    def test_include_extensions_oserror_on_stat_skips_file(
+        self, tmp_path, monkeypatch
+    ):
+        """Files that raise OSError on stat() are skipped in include_extensions mode."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        good = root / "good.py"
+        good.write_text("x=1\n", encoding="utf-8")
+        bad = root / "bad.py"
+        bad.write_text("y=2\n", encoding="utf-8")
+
+        original_stat = Path.stat
+
+        def mock_stat(self: Path, *args, **kwargs):
+            if self.name == "bad.py":
+                raise OSError("stat error")
+            return original_stat(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", mock_stat)
+        results = {p.name for p in scan_directory(root, include_extensions={".py"})}
+        assert "good.py" in results
+        assert "bad.py" not in results

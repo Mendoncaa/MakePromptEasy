@@ -13,14 +13,24 @@ from prompt_pack.config import (
 
 
 def is_ignored_dir(path: Path) -> bool:
-    """Return True if any part of *path* is a directory that should be skipped."""
-    for part in path.parts:
-        if part in DEFAULT_IGNORE_DIRS:
+    """Return True if *path*'s own name matches an ignored directory pattern.
+
+    Only the entry name is checked — not ancestor components — to avoid
+    false positives when the absolute path to the project happens to
+    contain an ignored name (e.g. a project at ``/home/user/env/project``
+    must not be excluded because ``env`` appears in the path).
+
+    The recursive walk in :func:`scan_directory` prunes entire directory
+    subtrees, so any file that reaches :func:`should_ignore` is guaranteed
+    not to live inside a previously-pruned directory.
+    """
+    name = path.name
+    if name in DEFAULT_IGNORE_DIRS:
+        return True
+    # Match glob-style patterns like *.egg-info (only the name, not the full path)
+    for pattern in DEFAULT_IGNORE_DIRS:
+        if "*" in pattern and Path(name).match(pattern):
             return True
-        # Match glob-style patterns like *.egg-info
-        for pattern in DEFAULT_IGNORE_DIRS:
-            if "*" in pattern and Path(part).match(pattern):
-                return True
     return False
 
 

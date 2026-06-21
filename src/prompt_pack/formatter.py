@@ -109,13 +109,13 @@ def build_markdown(files: Iterable[Path], root: Path) -> str:
     sections: list[str] = []
     total_lines = 0
     total_chars = 0
-    skipped: list[Path] = []
+    skipped: set[Path] = set()
 
     for path in file_list:
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
-            skipped.append(path)
+            skipped.add(path)
             continue
 
         rel = path.relative_to(root) if path.is_relative_to(root) else path
@@ -144,7 +144,7 @@ def build_markdown(files: Iterable[Path], root: Path) -> str:
     if skipped:
         skipped_note = (
             "> ⚠️ **Skipped (unreadable):** "
-            + ", ".join(f"`{p.name}`" for p in skipped)
+            + ", ".join(f"`{p.name}`" for p in sorted(skipped, key=lambda p: p.name))
             + "\n\n---\n"
         )
         header_lines.append(skipped_note)

@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from prompt_pack import __version__
 from prompt_pack.config import MAX_FILE_SIZE_BYTES
 from prompt_pack.formatter import build_markdown, estimate_tokens
 from prompt_pack.scanner import scan_directory
@@ -23,6 +24,14 @@ app = typer.Typer(
 
 console = Console()
 err_console = Console(stderr=True)
+
+_VERSION_CALLBACK_CALLED = False
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"prompt-pack {__version__}")
+        raise typer.Exit()
 
 
 @app.command()
@@ -59,6 +68,17 @@ def main(
             help="Print output to stdout. No file is written; no summary panel.",
         ),
     ] = False,
+    extensions: Annotated[
+        str | None,
+        typer.Option(
+            "--extensions",
+            "-e",
+            help=(
+                "Comma-separated file extensions to include (e.g. py,ts,go). "
+                "Overrides default extension filtering — only these types are packed."
+            ),
+        ),
+    ] = None,
     max_size: Annotated[
         int,
         typer.Option(
@@ -67,14 +87,46 @@ def main(
             min=1,
         ),
     ] = MAX_FILE_SIZE_BYTES // 1024,
+    version: Annotated[
+        bool | None,
+        typer.Option(
+            "--version",
+            "-V",
+            help="Show version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = None,
 ) -> None:
     """Pack *PATH* into a single Markdown file and copy it to the clipboard."""
     max_size_bytes = max_size * 1024
 
+    # ── Mutual-exclusion guard ────────────────────────────────────────────────
+    if stdout and output:
+        err_console.print(
+            "[yellow]Warning:[/] --output is ignored when --stdout is used."
+        )
+
+    # ── Parse --extensions ────────────────────────────────────────────────────
+    include_extensions: set[str] | None = None
+    if extensions:
+        include_extensions = {
+            f".{ext.lstrip('.')}" for ext in extensions.split(",") if ext.strip()
+        }
+        if not include_extensions:
+            err_console.print("[bold red]Error:[/] --extensions value is empty.")
+            raise typer.Exit(code=1)
+
     # ── Scan ─────────────────────────────────────────────────────────────────
     with console.status("[bold cyan]Scanning files…", spinner="dots"):
         try:
-            files = list(scan_directory(path, max_size_bytes=max_size_bytes))
+            files = list(
+                scan_directory(
+                    path,
+                    max_size_bytes=max_size_bytes,
+                    include_extensions=include_extensions,
+                )
+            )
         except (FileNotFoundError, NotADirectoryError) as exc:
             err_console.print(f"[bold red]Error:[/] {exc}")
             raise typer.Exit(code=1) from exc

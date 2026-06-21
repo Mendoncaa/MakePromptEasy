@@ -14,6 +14,7 @@ def scan_directory(
     root: Path,
     max_size_bytes: int = MAX_FILE_SIZE_BYTES,
     ignore_patterns: list[str] | None = None,
+    include_extensions: set[str] | None = None,
 ) -> Generator[Path, None, None]:
     """Yield every non-ignored file under *root*, recursively.
 
@@ -26,6 +27,10 @@ def scan_directory(
         max_size_bytes: Per-file size cap; files above this are skipped.
         ignore_patterns: Glob patterns to exclude. When ``None``, patterns
             are loaded automatically from *root*/.promptpackignore.
+        include_extensions: When set, only files whose extension (lowercase,
+            with leading dot) is in this set are yielded.  All other
+            extension-based filtering is bypassed for these files.
+            Example: ``{'.py', '.ts'}``.
 
     Yields:
         Absolute Path objects for each included file, sorted for
@@ -43,7 +48,7 @@ def scan_directory(
     if ignore_patterns is None:
         ignore_patterns = load_ignore_patterns(root)
 
-    yield from _walk(root, max_size_bytes, ignore_patterns, root)
+    yield from _walk(root, max_size_bytes, ignore_patterns, root, include_extensions)
 
 
 def _walk(
@@ -51,6 +56,7 @@ def _walk(
     max_size_bytes: int,
     ignore_patterns: list[str],
     root: Path,
+    include_extensions: set[str] | None = None,
 ) -> Generator[Path, None, None]:
     """Internal recursive walk — sorted for determinism."""
     try:
@@ -70,11 +76,26 @@ def _walk(
                 continue
             if matches_ignore_pattern(entry, root, ignore_patterns):
                 continue
-            yield from _walk(entry, max_size_bytes, ignore_patterns, root)
+            yield from _walk(
+                entry, max_size_bytes, ignore_patterns, root, include_extensions
+            )
 
         elif entry.is_file():
-            if should_ignore(entry, max_size_bytes):
-                continue
-            if matches_ignore_pattern(entry, root, ignore_patterns):
-                continue
+            if include_extensions is not None:
+                # Allow-list mode: only yield files with a matching extension
+                if entry.suffix.lower() not in include_extensions:
+                    continue
+                # Still enforce size and user ignore patterns
+                try:
+                    if entry.stat().st_size > max_size_bytes:
+                        continue
+                except OSError:
+                    continue
+                if matches_ignore_pattern(entry, root, ignore_patterns):
+                    continue
+            else:
+                if should_ignore(entry, max_size_bytes):
+                    continue
+                if matches_ignore_pattern(entry, root, ignore_patterns):
+                    continue
             yield entry
