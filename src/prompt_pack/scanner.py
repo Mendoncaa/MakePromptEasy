@@ -7,11 +7,13 @@ from pathlib import Path
 
 from prompt_pack.config import MAX_FILE_SIZE_BYTES
 from prompt_pack.filters import should_ignore
+from prompt_pack.ignorefilter import load_ignore_patterns, matches_ignore_pattern
 
 
 def scan_directory(
     root: Path,
     max_size_bytes: int = MAX_FILE_SIZE_BYTES,
+    ignore_patterns: list[str] | None = None,
 ) -> Generator[Path, None, None]:
     """Yield every non-ignored file under *root*, recursively.
 
@@ -22,6 +24,8 @@ def scan_directory(
     Args:
         root: The directory to scan.
         max_size_bytes: Per-file size cap; files above this are skipped.
+        ignore_patterns: Glob patterns to exclude. When ``None``, patterns
+            are loaded automatically from *root*/.promptpackignore.
 
     Yields:
         Absolute Path objects for each included file, sorted for
@@ -36,10 +40,18 @@ def scan_directory(
     if not root.is_dir():
         raise NotADirectoryError(f"Path is not a directory: {root}")
 
-    yield from _walk(root, max_size_bytes)
+    if ignore_patterns is None:
+        ignore_patterns = load_ignore_patterns(root)
+
+    yield from _walk(root, max_size_bytes, ignore_patterns, root)
 
 
-def _walk(directory: Path, max_size_bytes: int) -> Generator[Path, None, None]:
+def _walk(
+    directory: Path,
+    max_size_bytes: int,
+    ignore_patterns: list[str],
+    root: Path,
+) -> Generator[Path, None, None]:
     """Internal recursive walk — sorted for determinism."""
     try:
         entries = sorted(
@@ -56,8 +68,13 @@ def _walk(directory: Path, max_size_bytes: int) -> Generator[Path, None, None]:
             # Prune ignored directories entirely — don't descend into them
             if should_ignore(entry, max_size_bytes):
                 continue
-            yield from _walk(entry, max_size_bytes)
+            if matches_ignore_pattern(entry, root, ignore_patterns):
+                continue
+            yield from _walk(entry, max_size_bytes, ignore_patterns, root)
 
         elif entry.is_file():
-            if not should_ignore(entry, max_size_bytes):
-                yield entry
+            if should_ignore(entry, max_size_bytes):
+                continue
+            if matches_ignore_pattern(entry, root, ignore_patterns):
+                continue
+            yield entry

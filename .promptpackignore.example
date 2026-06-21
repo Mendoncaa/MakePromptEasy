@@ -1,0 +1,25 @@
+# .promptpackignore — custom ignore rules for prompt-pack
+#
+# Syntax: one glob pattern per line.
+# Lines starting with "#" are comments.
+# Patterns match against the file/directory name OR the relative path.
+#
+# Examples:
+
+# Exclude all log files anywhere in the tree
+# *.log
+
+# Exclude all temporary files
+# *.tmp
+# *.bak
+
+# Exclude a specific folder
+# fixtures/
+# test_data/
+
+# Exclude a specific file
+# secrets.env
+# .env.local
+
+# Exclude all files in a specific subfolder
+# data/*.csv
