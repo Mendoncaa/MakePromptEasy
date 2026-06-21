@@ -104,6 +104,31 @@ MakePromptEasy/
 
 ---
 
+## Phase 6 — Análise Crítica (Fix + Extensions)
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| **6.1** | Fix `is_ignored_dir` — verificar apenas `path.name` (evita false positive em paths absolutos) | [x] |
+| **6.2** | `skipped` como `set` em formatter (O(1) lookup no ToC) | [x] |
+| **6.3** | Flag `--version` / `-V` | [x] |
+| **6.4** | Warning `--stdout + --output` (mutual exclusion) | [x] |
+| **6.5** | Flag `--extensions` / `-e` (allow-list de extensões no scanner) | [x] |
+
+---
+
+## Phase 7 — Auditoria de Segurança + Correção de Markdown
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| **7.1** | Code-fence dinâmica (`_compute_fence`: N > max backtick run no conteúdo) | [x] |
+| **7.2** | Prevenção de fuga de segredos (`.env`, `*.pem`, `*.key`, `id_rsa*`, etc.) | [x] |
+| **7.3** | TOC anchors com `<a id>` explícito + `_slugify` GitHub-compatível | [x] |
+| **7.4** | Deteção de binários via null-byte sniff (primeiros 8 KB) | [x] |
+| **7.5** | `--use-gitignore` com `pathspec` (spec completo `.gitignore`) | [x] |
+| **7.6** | `PackResult` dataclass — métricas consistentes entre header e painel CLI | [x] |
+
+---
+
 ## Verificação por Fase
 
 1. **Phase 0** — `prompt-pack --help` imprime no terminal sem erro
