@@ -6,7 +6,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 from prompt_pack.config import MAX_FILE_SIZE_BYTES
-from prompt_pack.filters import should_ignore
+from prompt_pack.filters import is_sensitive, should_ignore
 from prompt_pack.ignorefilter import (
     load_gitignore,
     load_ignore_patterns,
@@ -105,6 +105,9 @@ def _walk(
             if include_extensions is not None:
                 # Allow-list mode: only yield files with a matching extension
                 if entry.suffix.lower() not in include_extensions:
+                    continue
+                # Secrets and binaries are excluded even in allow-list mode
+                if is_sensitive(entry):
                     continue
                 # Still enforce size and user ignore patterns
                 try:

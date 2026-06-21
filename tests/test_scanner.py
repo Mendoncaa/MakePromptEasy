@@ -154,6 +154,25 @@ class TestScanDirectoryExtensions:
         assert "small.py" in results
         assert "large.py" not in results
 
+    def test_include_extensions_excludes_secrets(self, tmp_path):
+        """Secret files must be excluded even when their extension is allow-listed."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "server.key").write_text("-----BEGIN KEY-----\n", encoding="utf-8")
+        (root / "app.key").write_text("just a keymap\n", encoding="utf-8")
+        # Both end in .key; *.key is a sensitive glob, so neither should leak
+        results = {p.name for p in scan_directory(root, include_extensions={".key"})}
+        assert results == set()
+
+    def test_include_extensions_excludes_binaries(self, tmp_path):
+        """Binary files must be excluded even when their extension is allow-listed."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "text.dat").write_text("plain text\n", encoding="utf-8")
+        (root / "blob.dat").write_bytes(b"\x00\x01\x02\x03")
+        results = {p.name for p in scan_directory(root, include_extensions={".dat"})}
+        assert results == {"text.dat"}
+
     def test_include_extensions_respects_promptpackignore(self, tmp_path):
         from prompt_pack.ignorefilter import IGNORE_FILE_NAME
 

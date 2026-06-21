@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from prompt_pack.filters import is_ignored_dir, should_ignore
+from prompt_pack.filters import (
+    _BINARY_SNIFF_SIZE,
+    _is_binary,
+    is_ignored_dir,
+    is_sensitive,
+    should_ignore,
+)
 
 # ── is_ignored_dir ────────────────────────────────────────────────────────────
 
@@ -184,3 +190,38 @@ class TestShouldIgnoreBinary:
         f.write_text("all:\n\techo hello\n", encoding="utf-8")
         # Makefile is not in IGNORE_FILENAMES, and has no null bytes
         assert should_ignore(f) is False
+
+    def test_sniff_only_reads_header_not_whole_file(self, tmp_path):
+        """The binary sniff must inspect only the first 8 KB.
+
+        A null byte placed *after* the sniff window must NOT flag the file
+        as binary — proving the read is bounded (and not the whole file).
+        """
+        f = tmp_path / "large_text_then_null.txt"
+        f.write_bytes(b"a" * (_BINARY_SNIFF_SIZE + 10) + b"\x00")
+        assert _is_binary(f) is False
+
+    def test_sniff_detects_null_within_header(self, tmp_path):
+        f = tmp_path / "null_early.txt"
+        f.write_bytes(b"a" * 10 + b"\x00" + b"a" * (_BINARY_SNIFF_SIZE * 2))
+        assert _is_binary(f) is True
+
+
+# ── is_sensitive — shared secret/binary guard ─────────────────────────────────
+
+class TestIsSensitive:
+    @pytest.mark.parametrize("name", [".env", "id_rsa", "secrets.pem", "server.key"])
+    def test_secret_names_are_sensitive(self, tmp_path, name):
+        p = tmp_path / name
+        p.write_text("SECRET", encoding="utf-8")
+        assert is_sensitive(p) is True
+
+    def test_binary_content_is_sensitive(self, tmp_path):
+        p = tmp_path / "blob.dat"
+        p.write_bytes(b"\x00\x01\x02")
+        assert is_sensitive(p) is True
+
+    def test_plain_source_not_sensitive(self, tmp_path):
+        p = tmp_path / "main.py"
+        p.write_text("x = 1\n", encoding="utf-8")
+        assert is_sensitive(p) is False

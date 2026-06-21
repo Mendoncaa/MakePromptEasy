@@ -36,23 +36,41 @@ def is_ignored_dir(path: Path) -> bool:
     return False
 
 
+def _is_sensitive_name(path: Path) -> bool:
+    """Return True if *path*'s name is a known secret/credential file.
+
+    Checks exact filenames (``.env``, ``id_rsa``…) and glob patterns
+    (``.env.*``, ``*.pem``, ``id_rsa*``…). Name-only — no I/O.
+    """
+    if path.name in DEFAULT_IGNORE_FILENAMES:
+        return True
+    return any(fnmatch.fnmatch(path.name, pattern) for pattern in SENSITIVE_PATTERNS)
+
+
+def is_sensitive(path: Path) -> bool:
+    """Return True if *path* is a secret/credential or binary file.
+
+    Applied in *every* scan mode — including ``--extensions`` allow-list
+    mode — so that secrets (``.env``, ``*.pem``, ``id_rsa``…) and binary
+    blobs are never packed regardless of the chosen extension filter.
+    """
+    if _is_sensitive_name(path):
+        return True
+    return path.is_file() and _is_binary(path)
+
+
 def should_ignore(path: Path, max_size_bytes: int = MAX_FILE_SIZE_BYTES) -> bool:
     """Return True if *path* should be excluded from the prompt pack.
 
     Checks (in order, cheapest first):
-    1. Filename exact match
-    2. Sensitive filename glob pattern
-    3. Extension match
-    4. Directory name match
-    5. File size exceeds *max_size_bytes*
+    1. Filename exact match / sensitive filename glob pattern
+    2. Extension match
+    3. Directory name match
+    4. File size exceeds *max_size_bytes*
+    5. Binary content sniff
     """
-    if path.name in DEFAULT_IGNORE_FILENAMES:
+    if _is_sensitive_name(path):
         return True
-
-    # Check sensitive filename globs (e.g. .env.*, *.pem, id_rsa*)
-    for pattern in SENSITIVE_PATTERNS:
-        if fnmatch.fnmatch(path.name, pattern):
-            return True
 
     if path.suffix.lower() in DEFAULT_IGNORE_EXTENSIONS:
         return True
@@ -80,11 +98,13 @@ _BINARY_SNIFF_SIZE = 8192
 def _is_binary(path: Path) -> bool:
     """Return True if *path* appears to be a binary file.
 
-    Reads the first 8 KB and checks for null bytes — a reliable heuristic
-    used by Git itself.
+    Reads only the first 8 KB and checks for null bytes — a reliable
+    heuristic used by Git itself. Streaming the read avoids loading large
+    files fully into memory just to inspect their header.
     """
     try:
-        chunk = path.read_bytes()[:_BINARY_SNIFF_SIZE]
+        with path.open("rb") as fh:
+            chunk = fh.read(_BINARY_SNIFF_SIZE)
     except OSError:
         return True  # Can't read → treat as binary
     return b"\x00" in chunk
