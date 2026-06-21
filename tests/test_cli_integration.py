@@ -82,3 +82,94 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         # Rich panel content should be in output
         assert "Files packed" in result.output or "done" in result.output.lower()
+
+    def test_empty_directory_shows_no_files_warning(self, tmp_path):
+        empty = tmp_path / "empty_project"
+        empty.mkdir()
+        result = runner.invoke(app, [str(empty), "--no-clipboard"])
+        assert result.exit_code == 0
+        assert "No files found" in result.output
+
+    def test_stdout_mode_prints_markdown(self, tmp_path):
+        root = _make_tree(tmp_path)
+        result = runner.invoke(app, [str(root), "--stdout", "--no-clipboard"])
+        assert result.exit_code == 0
+        assert "# Prompt Pack" in result.output
+
+    def test_stdout_mode_writes_no_file(self, tmp_path):
+        root = _make_tree(tmp_path)
+        result = runner.invoke(app, [str(root), "--stdout", "--no-clipboard"])
+        assert result.exit_code == 0
+        # Default output file should NOT be created
+        assert not (tmp_path / "prompt_output.md").exists()
+
+    def test_scan_error_handled_gracefully(self, tmp_path, monkeypatch):
+        import prompt_pack.cli as cli_module
+
+        def bad_scan(*args, **kwargs):
+            raise FileNotFoundError("Mock scan error")
+
+        monkeypatch.setattr(cli_module, "scan_directory", bad_scan)
+        result = runner.invoke(app, [str(tmp_path), "--no-clipboard"])
+        assert result.exit_code == 1
+
+    def test_write_error_handled_gracefully(self, tmp_path, monkeypatch):
+        root = _make_tree(tmp_path)
+        out = tmp_path / "out.md"
+
+        original_write = Path.write_text
+
+        def bad_write(self, *args, **kwargs):
+            if self == out:
+                raise OSError("Disk full")
+            return original_write(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", bad_write)
+        result = runner.invoke(
+            app, [str(root), "--output", str(out), "--no-clipboard"]
+        )
+        assert result.exit_code == 1
+
+    def test_stdout_mode_with_clipboard(self, tmp_path, monkeypatch):
+        import pyperclip
+
+        copied: list[str] = []
+        monkeypatch.setattr(pyperclip, "copy", lambda text: copied.append(text))
+        root = _make_tree(tmp_path)
+        result = runner.invoke(app, [str(root), "--stdout"])
+        assert result.exit_code == 0
+        assert len(copied) == 1
+
+    def test_stdout_mode_clipboard_failure_non_fatal(self, tmp_path, monkeypatch):
+        import pyperclip
+
+        monkeypatch.setattr(
+            pyperclip, "copy", lambda text: (_ for _ in ()).throw(Exception("fail"))
+        )
+        root = _make_tree(tmp_path)
+        result = runner.invoke(app, [str(root), "--stdout"])
+        assert result.exit_code == 0
+
+    def test_clipboard_success_shows_copied(self, tmp_path, monkeypatch):
+        import pyperclip
+
+        copied: list[str] = []
+        monkeypatch.setattr(pyperclip, "copy", lambda text: copied.append(text))
+        root = _make_tree(tmp_path)
+        out = tmp_path / "out.md"
+        result = runner.invoke(app, [str(root), "--output", str(out)])
+        assert result.exit_code == 0
+        assert len(copied) == 1
+        assert "copied to clipboard" in result.output
+
+    def test_clipboard_failure_is_non_fatal(self, tmp_path, monkeypatch):
+        import pyperclip
+
+        monkeypatch.setattr(
+            pyperclip, "copy", lambda text: (_ for _ in ()).throw(Exception("No CB"))
+        )
+        root = _make_tree(tmp_path)
+        out = tmp_path / "out.md"
+        result = runner.invoke(app, [str(root), "--output", str(out)])
+        assert result.exit_code == 0
+        assert out.exists()

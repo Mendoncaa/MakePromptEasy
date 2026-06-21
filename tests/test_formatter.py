@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from prompt_pack.formatter import _estimate_tokens, _language_hint, build_markdown
+from prompt_pack.formatter import _language_hint, build_markdown, estimate_tokens
 
 
 class TestLanguageHint:
@@ -29,14 +29,14 @@ class TestLanguageHint:
 
 class TestEstimateTokens:
     def test_empty_string(self):
-        assert _estimate_tokens("") == 1  # Minimum of 1
+        assert estimate_tokens("") == 1  # Minimum of 1
 
     def test_four_chars_is_one_token(self):
-        assert _estimate_tokens("abcd") == 1
+        assert estimate_tokens("abcd") == 1
 
     def test_larger_text(self):
         text = "a" * 4000
-        assert _estimate_tokens(text) == 1000
+        assert estimate_tokens(text) == 1000
 
 
 class TestBuildMarkdown:
@@ -100,3 +100,28 @@ class TestBuildMarkdown:
         files = self._make_files(tmp_path, {"app.py": "x = 1\n"})
         md = build_markdown(files, root=tmp_path)
         assert "## Table of Contents" in md
+
+    def test_anchor_uses_readable_slug(self, tmp_path):
+        """Anchors should use dashes, not remove characters."""
+        sub = tmp_path / "src"
+        sub.mkdir()
+        f = sub / "utils_v2.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        md = build_markdown([f], root=tmp_path)
+        # Should produce "src-utils-v2-py", not "srcutils_v2py"
+        assert "src-utils-v2-py" in md
+
+    def test_unreadable_file_goes_to_skipped_note(self, tmp_path, monkeypatch):
+        """Files that raise OSError on read should appear in the skipped note."""
+        f = tmp_path / "locked.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+
+        def bad_read_text(self, *args, **kwargs):
+            raise OSError("Permission denied")
+
+        monkeypatch.setattr(Path, "read_text", bad_read_text)
+        md = build_markdown([f], root=tmp_path)
+        assert "Skipped" in md
+        assert "locked.py" in md
+        # The file should also be excluded from the ToC (covered by continue)
+        assert "**Files:** 0" in md

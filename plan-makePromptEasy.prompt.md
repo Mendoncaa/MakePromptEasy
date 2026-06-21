@@ -85,11 +85,22 @@ MakePromptEasy/
 
 | Etapa | Descrição | Status |
 |---|---|---|
-| **4.1** | Suporte a `.promptpackignore` (estilo `.gitignore`, regras glob por linha) | [ ] |
-| **4.2** | Estimativa de tokens no rodapé (regra simples: `chars / 4`) | [ ] |
-| **4.3** | `README.md` completo com exemplos de uso + badge de testes | [ ] |
+| **4.1** | Suporte a `.promptpackignore` (estilo `.gitignore`, regras glob por linha) | [x] |
+| **4.2** | Estimativa de tokens no rodapé (regra simples: `chars / 4`) | [x] |
+| **4.3** | `README.md` completo com exemplos de uso + badge de testes | [x] |
 
 > **Regra de ouro:** Cada etapa só avança quando a anterior está **verde em testes, sem erros de linting (`ruff`), com commit+push feito** e `plan.md` atualizado.
+
+---
+
+## Phase 5 — Análise Crítica + Melhorias
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| **5.1** | `estimate_tokens` público + anchor slugify legível (`src/utils.py` → `src-utils-py`) | [x] |
+| **5.2** | Flag `--stdout` para modo pipe (escreve em stdout, sem painel rich) | [x] |
+| **5.3** | Cobertura 100% (90 testes; filtros, scanner, formatter, ignorefilter, CLI) | [x] |
+| **5.4** | GitHub Actions CI (Python 3.11/3.12/3.13) + coverage ≥95% obrigatório | [x] |
 
 ---
 

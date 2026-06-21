@@ -44,6 +44,15 @@ class TestLoadIgnorePatterns:
         (tmp_path / IGNORE_FILE_NAME).write_text(text, encoding="utf-8")
         assert load_ignore_patterns(tmp_path) == []
 
+    def test_oserror_on_read_returns_empty(self, tmp_path, monkeypatch):
+        """If the ignore file can't be read, return [] gracefully."""
+        (tmp_path / IGNORE_FILE_NAME).write_text("*.log\n", encoding="utf-8")
+
+        def bad_read_text(self, *args, **kwargs):
+            raise OSError("Permission denied")
+
+        monkeypatch.setattr(Path, "read_text", bad_read_text)
+        assert load_ignore_patterns(tmp_path) == []
 
 # ── matches_ignore_pattern ────────────────────────────────────────────────────
 

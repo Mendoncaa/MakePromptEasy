@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -11,7 +12,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from prompt_pack.config import MAX_FILE_SIZE_BYTES
-from prompt_pack.formatter import _estimate_tokens, build_markdown
+from prompt_pack.formatter import build_markdown, estimate_tokens
 from prompt_pack.scanner import scan_directory
 
 app = typer.Typer(
@@ -51,6 +52,13 @@ def main(
         bool,
         typer.Option("--no-clipboard", help="Skip copying to clipboard."),
     ] = False,
+    stdout: Annotated[
+        bool,
+        typer.Option(
+            "--stdout",
+            help="Print output to stdout. No file is written; no summary panel.",
+        ),
+    ] = False,
     max_size: Annotated[
         int,
         typer.Option(
@@ -85,6 +93,19 @@ def main(
     with console.status("[bold cyan]Building Markdown…", spinner="dots"):
         markdown = build_markdown(files, root=path)
 
+    # ── Stdout mode ───────────────────────────────────────────────────────────
+    if stdout:
+        # Write raw UTF-8 to stdout.buffer to avoid terminal encoding issues
+        sys.stdout.buffer.write(markdown.encode("utf-8"))
+        if not no_clipboard:
+            try:
+                import pyperclip  # noqa: PLC0415
+
+                pyperclip.copy(markdown)
+            except Exception:  # noqa: BLE001
+                pass
+        return
+
     # ── Write file ────────────────────────────────────────────────────────────
     out_path = output or (Path.cwd() / "prompt_output.md")
     try:
@@ -106,7 +127,7 @@ def main(
 
     # ── Summary panel ─────────────────────────────────────────────────────────
     total_lines = markdown.count("\n")
-    tokens = _estimate_tokens(markdown)
+    tokens = estimate_tokens(markdown)
     clipboard_status = (
         "[green]✓ copied to clipboard[/]"
         if clipboard_ok
@@ -127,5 +148,5 @@ def main(
     )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     app()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-import pytest  # noqa: I001
+from pathlib import Path
+
+import pytest
 
 from prompt_pack.filters import is_ignored_dir, should_ignore
 
@@ -94,3 +96,14 @@ class TestShouldIgnoreSize:
         p.write_bytes(b"y" * 1024)  # 1 KB
         assert should_ignore(p, max_size_bytes=512) is True  # 512 bytes limit
         assert should_ignore(p, max_size_bytes=2048) is False  # 2 KB limit
+
+    def test_stat_oserror_causes_ignore(self, tmp_path, monkeypatch):
+        """If stat() raises OSError the file should be excluded (safe default)."""
+        f = tmp_path / "mystery.py"
+        f.write_text("x = 1", encoding="utf-8")
+
+        def bad_stat(self, *args, **kwargs):
+            raise OSError("stat failed")
+
+        monkeypatch.setattr(Path, "stat", bad_stat)
+        assert should_ignore(f) is True

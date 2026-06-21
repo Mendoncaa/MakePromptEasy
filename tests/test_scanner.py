@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from prompt_pack.scanner import scan_directory
@@ -67,3 +69,45 @@ class TestScanDirectory:
         import types
         result = scan_directory(tmp_tree)
         assert isinstance(result, types.GeneratorType)
+
+    def test_symlinks_are_skipped(self, tmp_path, monkeypatch):
+        """Symlinks must never be followed to avoid infinite loops."""
+        root = tmp_path / "root"
+        root.mkdir()
+        real = root / "real.py"
+        real.write_text("x = 1\n", encoding="utf-8")
+        fake_link = root / "link.py"
+        fake_link.write_text("x = 1\n", encoding="utf-8")
+
+        original_is_symlink = Path.is_symlink
+
+        def mock_is_symlink(self: Path) -> bool:
+            if self.name == "link.py":
+                return True
+            return original_is_symlink(self)
+
+        monkeypatch.setattr(Path, "is_symlink", mock_is_symlink)
+        results = {p.name for p in scan_directory(root)}
+        assert "real.py" in results
+        assert "link.py" not in results
+
+    def test_permission_error_on_subdir_is_skipped(self, tmp_path, monkeypatch):
+        """Directories that raise PermissionError are silently skipped."""
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "accessible.py").write_text("x = 1\n", encoding="utf-8")
+        restricted = root / "restricted"
+        restricted.mkdir()
+        (restricted / "secret.py").write_text("secret\n", encoding="utf-8")
+
+        original_iterdir = Path.iterdir
+
+        def mock_iterdir(self: Path):
+            if self.name == "restricted":
+                raise PermissionError("Access denied")
+            return original_iterdir(self)
+
+        monkeypatch.setattr(Path, "iterdir", mock_iterdir)
+        results = {p.name for p in scan_directory(root)}
+        assert "accessible.py" in results
+        assert "secret.py" not in results

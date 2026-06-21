@@ -58,3 +58,9 @@ addopts = "-v --tb=short"
 
 [tool.coverage.run]
 source = ["src/prompt_pack"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
