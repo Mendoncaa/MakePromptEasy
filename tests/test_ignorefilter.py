@@ -148,3 +148,48 @@ class TestScannerWithIgnoreFile:
 
         results = {p.name for p in scan_directory(tmp_path, ignore_patterns=[])}
         assert "app.log" in results  # Not excluded — explicit empty list used
+
+
+# ── .gitignore support ────────────────────────────────────────────────────────
+
+class TestGitignoreSupport:
+    def test_load_gitignore_returns_none_when_absent(self, tmp_path):
+        from prompt_pack.ignorefilter import load_gitignore
+
+        assert load_gitignore(tmp_path) is None
+
+    def test_load_gitignore_parses_rules(self, tmp_path):
+        from prompt_pack.ignorefilter import load_gitignore
+
+        (tmp_path / ".gitignore").write_text("*.log\nbuild/\n", encoding="utf-8")
+        spec = load_gitignore(tmp_path)
+        assert spec is not None
+        assert spec.match_file("app.log")
+        assert spec.match_file("build/")
+        assert not spec.match_file("main.py")
+
+    def test_use_gitignore_excludes_matching_files(self, tmp_path):
+        from prompt_pack.scanner import scan_directory
+
+        (tmp_path / ".gitignore").write_text("*.log\ndist/\n", encoding="utf-8")
+        (tmp_path / "main.py").write_text("x=1\n", encoding="utf-8")
+        (tmp_path / "app.log").write_text("log\n", encoding="utf-8")
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "bundle.js").write_text("js\n", encoding="utf-8")
+
+        results = {p.name for p in scan_directory(tmp_path, use_gitignore=True)}
+        assert "main.py" in results
+        assert "app.log" not in results
+        assert "bundle.js" not in results
+
+    def test_use_gitignore_false_ignores_gitignore(self, tmp_path):
+        from prompt_pack.scanner import scan_directory
+
+        (tmp_path / ".gitignore").write_text("*.log\n", encoding="utf-8")
+        (tmp_path / "main.py").write_text("x=1\n", encoding="utf-8")
+        (tmp_path / "app.log").write_text("log\n", encoding="utf-8")
+
+        results = {p.name for p in scan_directory(tmp_path, use_gitignore=False)}
+        assert "main.py" in results
+        assert "app.log" in results  # Not excluded when flag is off

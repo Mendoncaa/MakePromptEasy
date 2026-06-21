@@ -91,6 +91,36 @@ class TestShouldIgnoreFilename:
         assert should_ignore(p) is True
 
 
+# ── should_ignore — sensitive files (secrets) ─────────────────────────────────
+
+class TestShouldIgnoreSensitive:
+    @pytest.mark.parametrize(
+        "name",
+        [".env", ".env.local", ".env.production", ".npmrc", ".pypirc",
+         "id_rsa", "id_ed25519", "credentials", "credentials.json"],
+    )
+    def test_sensitive_exact_names_ignored(self, tmp_path, name):
+        p = tmp_path / name
+        p.write_text("SECRET=abc", encoding="utf-8")
+        assert should_ignore(p) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [".env.staging", ".env.test", "server.pem", "private.key",
+         "id_rsa.pub", "app.keystore"],
+    )
+    def test_sensitive_glob_patterns_ignored(self, tmp_path, name):
+        p = tmp_path / name
+        p.write_text("SECRET=abc", encoding="utf-8")
+        assert should_ignore(p) is True
+
+    def test_normal_env_related_name_not_ignored(self, tmp_path):
+        """A file named 'environment.py' must NOT be excluded."""
+        p = tmp_path / "environment.py"
+        p.write_text("ENV = 'prod'", encoding="utf-8")
+        assert should_ignore(p) is False
+
+
 # ── should_ignore — size ──────────────────────────────────────────────────────
 
 class TestShouldIgnoreSize:
@@ -125,3 +155,32 @@ class TestShouldIgnoreSize:
 
         monkeypatch.setattr(Path, "stat", bad_stat)
         assert should_ignore(f) is True
+
+
+# ── should_ignore — binary sniff ──────────────────────────────────────────────
+
+class TestShouldIgnoreBinary:
+    def test_file_with_null_bytes_is_binary(self, tmp_path):
+        """Files containing null bytes should be treated as binary."""
+        f = tmp_path / "data.bin"
+        f.write_bytes(b"ELF\x00\x01\x02" + b"x" * 100)
+        assert should_ignore(f) is True
+
+    def test_text_file_without_null_bytes_included(self, tmp_path):
+        """Normal text files must not be flagged as binary."""
+        f = tmp_path / "script.sh"
+        f.write_text("#!/bin/bash\necho hello\n", encoding="utf-8")
+        assert should_ignore(f) is False
+
+    def test_extensionless_binary_file_excluded(self, tmp_path):
+        """A file with no extension but binary content must be excluded."""
+        f = tmp_path / "mystery"
+        f.write_bytes(b"\x7fELF\x00" + b"\x01" * 200)
+        assert should_ignore(f) is True
+
+    def test_extensionless_text_file_included(self, tmp_path):
+        """A file with no extension but text content must be included."""
+        f = tmp_path / "Makefile"
+        f.write_text("all:\n\techo hello\n", encoding="utf-8")
+        # Makefile is not in IGNORE_FILENAMES, and has no null bytes
+        assert should_ignore(f) is False

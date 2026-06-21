@@ -13,7 +13,7 @@ from rich.text import Text
 
 from prompt_pack import __version__
 from prompt_pack.config import MAX_FILE_SIZE_BYTES
-from prompt_pack.formatter import build_markdown, estimate_tokens
+from prompt_pack.formatter import build_markdown
 from prompt_pack.scanner import scan_directory
 
 app = typer.Typer(
@@ -87,6 +87,13 @@ def main(
             min=1,
         ),
     ] = MAX_FILE_SIZE_BYTES // 1024,
+    use_gitignore: Annotated[
+        bool,
+        typer.Option(
+            "--use-gitignore",
+            help="Also respect .gitignore rules when scanning.",
+        ),
+    ] = False,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -125,6 +132,7 @@ def main(
                     path,
                     max_size_bytes=max_size_bytes,
                     include_extensions=include_extensions,
+                    use_gitignore=use_gitignore,
                 )
             )
         except (FileNotFoundError, NotADirectoryError) as exc:
@@ -143,7 +151,8 @@ def main(
 
     # ── Build Markdown ────────────────────────────────────────────────────────
     with console.status("[bold cyan]Building Markdown…", spinner="dots"):
-        markdown = build_markdown(files, root=path)
+        result = build_markdown(files, root=path)
+    markdown = result.markdown
 
     # ── Stdout mode ───────────────────────────────────────────────────────────
     if stdout:
@@ -178,8 +187,6 @@ def main(
             pass  # Clipboard failure is non-fatal
 
     # ── Summary panel ─────────────────────────────────────────────────────────
-    total_lines = markdown.count("\n")
-    tokens = estimate_tokens(markdown)
     clipboard_status = (
         "[green]✓ copied to clipboard[/]"
         if clipboard_ok
@@ -187,9 +194,9 @@ def main(
     )
 
     summary = Text.assemble(
-        ("Files packed: ", "bold"), (f"{len(files)}\n", "cyan"),
-        ("Lines: ", "bold"), (f"{total_lines:,}\n", "cyan"),
-        ("~Tokens: ", "bold"), (f"{tokens:,}\n", "cyan"),
+        ("Files packed: ", "bold"), (f"{result.file_count}\n", "cyan"),
+        ("Lines: ", "bold"), (f"{result.total_lines:,}\n", "cyan"),
+        ("~Tokens: ", "bold"), (f"{result.estimated_tokens:,}\n", "cyan"),
         ("Output: ", "bold"), (f"{out_path}\n", "cyan"),
         ("Clipboard: ", "bold"),
     )

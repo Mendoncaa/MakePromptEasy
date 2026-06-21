@@ -7,7 +7,12 @@ from pathlib import Path
 
 from prompt_pack.config import MAX_FILE_SIZE_BYTES
 from prompt_pack.filters import should_ignore
-from prompt_pack.ignorefilter import load_ignore_patterns, matches_ignore_pattern
+from prompt_pack.ignorefilter import (
+    load_gitignore,
+    load_ignore_patterns,
+    matches_gitignore,
+    matches_ignore_pattern,
+)
 
 
 def scan_directory(
@@ -15,6 +20,7 @@ def scan_directory(
     max_size_bytes: int = MAX_FILE_SIZE_BYTES,
     ignore_patterns: list[str] | None = None,
     include_extensions: set[str] | None = None,
+    use_gitignore: bool = False,
 ) -> Generator[Path, None, None]:
     """Yield every non-ignored file under *root*, recursively.
 
@@ -31,6 +37,7 @@ def scan_directory(
             with leading dot) is in this set are yielded.  All other
             extension-based filtering is bypassed for these files.
             Example: ``{'.py', '.ts'}``.
+        use_gitignore: If True, also load and respect *root*/.gitignore rules.
 
     Yields:
         Absolute Path objects for each included file, sorted for
@@ -48,7 +55,11 @@ def scan_directory(
     if ignore_patterns is None:
         ignore_patterns = load_ignore_patterns(root)
 
-    yield from _walk(root, max_size_bytes, ignore_patterns, root, include_extensions)
+    gitignore_spec = load_gitignore(root) if use_gitignore else None
+
+    yield from _walk(
+        root, max_size_bytes, ignore_patterns, root, include_extensions, gitignore_spec
+    )
 
 
 def _walk(
@@ -57,6 +68,7 @@ def _walk(
     ignore_patterns: list[str],
     root: Path,
     include_extensions: set[str] | None = None,
+    gitignore_spec: object | None = None,
 ) -> Generator[Path, None, None]:
     """Internal recursive walk — sorted for determinism."""
     try:
@@ -70,6 +82,10 @@ def _walk(
         if entry.is_symlink():
             continue  # Never follow symlinks — avoids infinite loops
 
+        # gitignore check — applies to both files and directories
+        if gitignore_spec and matches_gitignore(entry, root, gitignore_spec):
+            continue
+
         if entry.is_dir():
             # Prune ignored directories entirely — don't descend into them
             if should_ignore(entry, max_size_bytes):
@@ -77,7 +93,12 @@ def _walk(
             if matches_ignore_pattern(entry, root, ignore_patterns):
                 continue
             yield from _walk(
-                entry, max_size_bytes, ignore_patterns, root, include_extensions
+                entry,
+                max_size_bytes,
+                ignore_patterns,
+                root,
+                include_extensions,
+                gitignore_spec,
             )
 
         elif entry.is_file():

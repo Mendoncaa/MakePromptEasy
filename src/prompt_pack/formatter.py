@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 # Map of file extension → Markdown fenced-code language hint
@@ -85,15 +86,44 @@ def estimate_tokens(text: str | int) -> int:
 
 
 def _slugify(posix_path: str) -> str:
-    """Convert a POSIX path string to a readable Markdown anchor slug.
+    """Convert a POSIX path string to a GitHub-compatible anchor slug.
 
-    Example: ``src/utils_v2.py`` → ``src-utils-v2-py``
+    GitHub's anchor algorithm: lowercase, strip non-alphanumeric except
+    spaces and hyphens, then convert spaces to hyphens, collapse runs.
+
+    Since our paths have slashes, dots, and underscores, we convert them
+    all to hyphens first, which produces readable slugs like
+    ``src-utils-v2-py`` from ``src/utils_v2.py``.
     """
-    slug = re.sub(r"[/._\s]+", "-", posix_path.lower())
-    return re.sub(r"-+", "-", slug).strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", posix_path.lower())
+    return slug.strip("-")
 
 
-def build_markdown(files: Iterable[Path], root: Path) -> str:
+def _compute_fence(content: str) -> str:
+    """Return a backtick fence longer than any backtick run in *content*.
+
+    CommonMark allows fences with N≥3 backticks.  We scan the content for
+    the longest consecutive run of backticks and use max(3, longest+1).
+    """
+    longest = 0
+    for match in re.finditer(r"`+", content):
+        longest = max(longest, len(match.group()))
+    n = max(3, longest + 1)
+    return "`" * n
+
+
+@dataclass(frozen=True, slots=True)
+class PackResult:
+    """Result of packing files — contains the markdown and consistent metrics."""
+
+    markdown: str
+    file_count: int
+    total_lines: int
+    total_chars: int
+    estimated_tokens: int
+
+
+def build_markdown(files: Iterable[Path], root: Path) -> PackResult:
     """Build the complete Markdown string from a collection of file paths.
 
     Args:
@@ -123,7 +153,12 @@ def build_markdown(files: Iterable[Path], root: Path) -> str:
         total_lines += content.count("\n") + 1
         total_chars += len(content)
 
-        section = f"### `{rel.as_posix()}`\n\n```{lang}\n{content}\n```"
+        fence = _compute_fence(content)
+        anchor = _slugify(rel.as_posix())
+        section = (
+            f'<a id="{anchor}"></a>\n\n'
+            f"### `{rel.as_posix()}`\n\n{fence}{lang}\n{content}\n{fence}"
+        )
         sections.append(section)
 
     # ── Header ───────────────────────────────────────────────────────────────
@@ -170,4 +205,10 @@ def build_markdown(files: Iterable[Path], root: Path) -> str:
         f" · ~{estimate_tokens(total_chars):,} tokens*\n"
     )
 
-    return "\n".join(header_lines) + "\n".join(toc_lines) + body + footer
+    return PackResult(
+        markdown="\n".join(header_lines) + "\n".join(toc_lines) + body + footer,
+        file_count=len(sections),
+        total_lines=total_lines,
+        total_chars=total_chars,
+        estimated_tokens=estimate_tokens(total_chars),
+    )

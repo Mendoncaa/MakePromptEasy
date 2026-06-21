@@ -54,6 +54,8 @@ DEFAULT_IGNORE_EXTENSIONS: frozenset[str] = frozenset(
         ".sqlite", ".db", ".mdb",
         # Misc
         ".DS_Store", ".lock",
+        # Secrets / credentials
+        ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore",
     }
 )
 
@@ -70,7 +72,30 @@ DEFAULT_IGNORE_FILENAMES: frozenset[str] = frozenset(
         ".gitignore",
         ".gitattributes",
         ".editorconfig",
+        # Secrets / credentials / auth
+        ".env",
+        ".env.local",
+        ".env.production",
+        ".env.development",
+        ".npmrc",
+        ".pypirc",
+        "id_rsa",
+        "id_ed25519",
+        "credentials",
+        "credentials.json",
+        ".netrc",
+        ".htpasswd",
     }
+)
+
+# Glob patterns for sensitive filenames (checked by fnmatch on name)
+SENSITIVE_PATTERNS: tuple[str, ...] = (
+    ".env.*",
+    "*.pem",
+    "*.key",
+    "id_rsa*",
+    "id_ed25519*",
+    "*.keystore",
 )
 
 # Maximum file size to include (bytes) — files above this are skipped

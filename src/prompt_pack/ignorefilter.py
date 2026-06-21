@@ -1,9 +1,11 @@
-"""User-defined ignore patterns loaded from a .promptpackignore file."""
+"""User-defined ignore patterns loaded from .promptpackignore and .gitignore."""
 
 from __future__ import annotations
 
 import fnmatch
 from pathlib import Path
+
+import pathspec
 
 IGNORE_FILE_NAME = ".promptpackignore"
 
@@ -78,3 +80,37 @@ def matches_ignore_pattern(
             return True
 
     return False
+
+
+def load_gitignore(root: Path) -> pathspec.PathSpec | None:
+    """Load and parse *root*/.gitignore using the full gitignore spec.
+
+    Returns ``None`` if no .gitignore exists or it cannot be read.
+    """
+    gitignore = root / ".gitignore"
+    if not gitignore.exists():
+        return None
+    try:
+        text = gitignore.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return pathspec.PathSpec.from_lines("gitignore", text.splitlines())
+
+
+def matches_gitignore(path: Path, root: Path, spec: pathspec.PathSpec) -> bool:
+    """Return True if *path* is matched by the gitignore *spec*.
+
+    Args:
+        path: Absolute path to test.
+        root: Root directory (where .gitignore lives).
+        spec: Compiled PathSpec from :func:`load_gitignore`.
+    """
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return False
+    # pathspec expects forward slashes; add trailing / for directories
+    rel_str = rel.as_posix()
+    if path.is_dir():
+        rel_str += "/"
+    return spec.match_file(rel_str)
